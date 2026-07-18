@@ -1,0 +1,6 @@
+.cache/
+.render-*/
+__pycache__/
+.*-test/
+server.out
+server.err
