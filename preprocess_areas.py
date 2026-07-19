@@ -38,7 +38,7 @@ def render(data: dict, output: Path, scale: float, quality: int) -> dict:
     draw = ImageDraw.Draw(overlay)
     for park in data["parks"]:
         if len(park["p"]) >= 3:
-            draw.polygon([pixel(iso(point)) for point in park["p"]], fill=(115, 143, 104, 72))
+            draw.polygon([pixel(iso(point)) for point in park["p"]], fill=(115, 143, 104, 36))
     for road in data["roads"]:
         if len(road["p"]) < 2:
             continue

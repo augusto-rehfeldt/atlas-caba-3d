@@ -43,9 +43,9 @@ def street_colour(colour: str) -> tuple[int, int, int]:
 
 
 def aerial_ground(meta: dict, boundary: list, iso, min_x: float, min_y: float, width: int, height: int, scale: float) -> Image.Image:
-    """Warp the highest fully cached GCBA aerial layer onto the isometric ground plane."""
+    """Warp the highest cached GCBA aerial layer onto the isometric ground plane."""
     west, south, east, north = meta["bbox"]
-    selected = None
+    candidates = []
     for zoom in (17, 16, 15):
         directory = ROOT / ".cache" / "aerial-2021" / str(zoom)
         size = 2 ** zoom
@@ -61,9 +61,13 @@ def aerial_ground(meta: dict, boundary: list, iso, min_x: float, min_y: float, w
         x0, x1 = math.floor(left), math.floor(right)
         y0, y1 = math.floor(top), math.floor(bottom)
         paths = [(x, y, directory / f"{x}-{y}.png") for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)]
-        if paths and all(path.exists() for _, _, path in paths):
-            selected = zoom, size, x0, y0, x1, y1, paths
-            break
+        available = sum(path.exists() for _, _, path in paths)
+        if available:
+            candidates.append((available / len(paths), zoom, size, x0, y0, x1, y1, paths))
+
+    selected = next((candidate for candidate in candidates if candidate[0] >= .95), None)
+    if selected is None:
+        selected = max(candidates, default=None)
 
     background = Image.new("RGB", (width, height), BACKGROUND)
     mask = Image.new("L", (width, height))
@@ -78,9 +82,11 @@ def aerial_ground(meta: dict, boundary: list, iso, min_x: float, min_y: float, w
         ground = Image.new("RGB", (width, height), "#cfc3a6")
         return Image.composite(ground, background, mask)
 
-    _, size, x0, y0, x1, y1, paths = selected
-    mosaic = Image.new("RGB", ((x1 - x0 + 1) * 256, (y1 - y0 + 1) * 256))
+    _, _, size, x0, y0, x1, y1, paths = selected
+    mosaic = Image.new("RGB", ((x1 - x0 + 1) * 256, (y1 - y0 + 1) * 256), "#cfc3a6")
     for x, y, path in paths:
+        if not path.exists():
+            continue
         with Image.open(path) as tile_image:
             mosaic.paste(tile_image.convert("RGB"), ((x - x0) * 256, (y - y0) * 256))
 
@@ -202,7 +208,7 @@ def main(scale: float, quality: int) -> None:
         for park in data["parks"]:
             if len(park["p"]) < 3:
                 continue
-            draw.polygon([pixel(project(point)) for point in park["p"]], fill=(115, 143, 104, 72))
+            draw.polygon([pixel(project(point)) for point in park["p"]], fill=(115, 143, 104, 36))
             park_count += 1
         for road in data["roads"]:
             if len(road["p"]) < 2:

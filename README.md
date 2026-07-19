@@ -8,7 +8,7 @@ Double-click `index.html`. It opens the saved full-CABA render by default; the n
 
 Normal page loads use saved WebP renders and lightweight boundary/label shells, so every building is present without browser-side geometry generation. The cached GCBA aerial photography is warped onto the ground plane, preserving real vegetation, paving, road markings, and block texture; vector overlays retain clean geometry. Every building also carries a compact aerial-derived texture value encoding local roof contrast and roughness, used for deterministic roof detail without separate image files. Barrio renders use twice CABA's pixel density, satellite-derived roof colours, material-tinted façades, roof outlines, and resolution-aware windows on tall buildings. Eleven zoom levels reach 2.4×, and the navbar offers real, vivid, warm, monochrome, futuristic, and animated masks.
 
-The compact navbar includes street labels, 360° rotation, day/night modes, and area controls. Saved images rotate rigidly without affine distortion; using rotation on an individual barrio lazily activates its original geometry for correct 3D depth and façade direction. Full CABA remains a fast rigid overview instead of loading all 293 MB of barrio geometry. The default geographic orientation keeps north toward the top and east toward the right. Facade materials are stylized from aerial roof classes because vertical surfaces are not visible in an orthophoto.
+The compact navbar includes street labels, 360° barrio rotation, day/night modes, and area controls. Rotation lazily activates each barrio's original geometry for correct 3D depth and façade direction. The full-CABA raster stays north-up because true rotation would require loading all 293 MB of barrio geometry. The default geographic orientation keeps north toward the top and east toward the right. Facade materials are stylized from aerial roof classes because vertical surfaces are not visible in an orthophoto.
 
 ## High-resolution merged export
 
@@ -50,6 +50,7 @@ Build the lazy-loaded datasets for all 48 barrios, then save the full CABA rende
 ```powershell
 python build_caba.py
 python apply_building_textures.py
+python cache_aerial_coverage.py
 python preprocess_caba.py
 python preprocess_areas.py
 python validate_data.py

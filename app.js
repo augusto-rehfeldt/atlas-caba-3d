@@ -47,6 +47,8 @@ let pendingFrame = 0;
 let wheelTimer = 0;
 let wheelStart;
 let rotationStart;
+let rotationFrame = 0;
+let requestedRotation = state.rotation;
 let vectorMode = false;
 let vectorDataPromise;
 const dragSnapshot = document.createElement("canvas");
@@ -784,7 +786,25 @@ function overviewFallback() {
   painter.fillStyle = state.night ? "#081217" : "#172428";
   painter.fillRect(0, 0, preview.width, preview.height);
   world.boundary.forEach(points => { polygon(points); painter.fillStyle = state.night ? "#313c3e" : "#cfc3a6"; painter.fill(); });
-  world.parks.forEach(park => { polygon(park.p); painter.fillStyle = state.night ? "#294b3c" : "#738f68"; painter.fill(); });
+  if (groundMap?.ready) {
+    const horizontal = yawIso([1, 0]);
+    const vertical = yawIso([0, 1]);
+    painter.save();
+    painter.translate(canvas.clientWidth / 2 + state.panX, canvas.clientHeight / 2 + state.panY);
+    painter.transform(
+      horizontal[0] * state.zoom, horizontal[1] * state.zoom,
+      vertical[0] * state.zoom, vertical[1] * state.zoom,
+      0, 0,
+    );
+    painter.filter = state.night ? "brightness(.46) saturate(.75)" : "none";
+    painter.drawImage(
+      groundMap.image,
+      groundMap.x, groundMap.y,
+      groundMap.width / groundMap.scale, groundMap.height / groundMap.scale,
+    );
+    painter.restore();
+  }
+  world.parks.forEach(park => { polygon(park.p); painter.fillStyle = state.night ? "#294b3c88" : groundMap?.ready ? "#738f6833" : "#738f68"; painter.fill(); });
   painter.lineCap = "round";
   world.roads.forEach(road => {
     painter.beginPath();
@@ -935,34 +955,44 @@ rotationInput.addEventListener("pointerdown", () => {
   rotationStart = state.rotation;
   ensureVectorMap();
 });
-rotationInput.addEventListener("pointerup", () => setTimeout(() => {
-  rotationStart = undefined;
-  processTileQueue();
-}));
-rotationInput.addEventListener("pointercancel", () => { rotationStart = undefined; });
-rotationInput.addEventListener("input", event => {
-  const next = Number(event.currentTarget.value) * Math.PI / 180;
-  const delta = next - (rotationStart ?? state.rotation);
-  const horizontal = screenYaw([1, 0], delta);
-  const vertical = screenYaw([0, 1], delta);
-  canvas.style.willChange = "transform";
-  canvas.style.transformOrigin = "50% 50%";
-  canvas.style.transform = `matrix(${horizontal[0]},${horizontal[1]},${vertical[0]},${vertical[1]},0,0)`;
-});
-rotationInput.addEventListener("change", event => {
+function rotateTo(next) {
   const oldRotation = state.rotation;
   const oldZoom = state.zoom;
   const centre = yawIso([-state.panX / oldZoom, -state.panY / oldZoom], -oldRotation);
-  state.rotation = Number(event.currentTarget.value) * Math.PI / 180;
+  state.rotation = next;
   const projectedCentre = yawIso(centre);
   state.panX = -projectedCentre[0] * oldZoom;
   state.panY = -projectedCentre[1] * oldZoom;
-  canvas.style.transform = "none";
-  canvas.style.willChange = "auto";
-  fallbackView = renderedMap?.ready ? undefined : overviewFallback();
-  document.documentElement.dataset.rotation = event.currentTarget.value;
-  rotationStart = undefined;
+  fallbackView = overviewFallback();
+  document.documentElement.dataset.rotation = Math.round(next * 180 / Math.PI);
   draw();
+}
+function previewRotation() {
+  ensureVectorMap()?.then(ready => {
+    if (!ready) return;
+    cancelAnimationFrame(rotationFrame);
+    rotationFrame = requestAnimationFrame(() => rotateTo(requestedRotation));
+  });
+}
+function finishRotation() {
+  ensureVectorMap()?.then(ready => {
+    if (!ready) return;
+    cancelAnimationFrame(rotationFrame);
+    rotateTo(requestedRotation);
+    rotationStart = undefined;
+    processTileQueue();
+  });
+}
+rotationInput.addEventListener("pointerup", () => setTimeout(finishRotation));
+rotationInput.addEventListener("pointercancel", finishRotation);
+rotationInput.addEventListener("input", event => {
+  rotationStart ??= state.rotation;
+  requestedRotation = Number(event.currentTarget.value) * Math.PI / 180;
+  previewRotation();
+});
+rotationInput.addEventListener("change", event => {
+  requestedRotation = Number(event.currentTarget.value) * Math.PI / 180;
+  finishRotation();
 });
 window.addEventListener("resize", resize);
 
@@ -976,11 +1006,20 @@ function loadMap(data) {
     tileQueue.length = 0;
     wantedTiles = new Set();
     delete document.documentElement.dataset.tileMaxMs;
+    const isCabaOverview = window.SELECTED_AREA?.name === "CABA completa";
+    if (isCabaOverview) {
+      state.rotation = 0;
+      requestedRotation = 0;
+      rotationInput.value = 0;
+      document.documentElement.dataset.rotation = 0;
+    }
     fitWorld();
     if (!exporting && Number(query.get("zoom"))) state.zoom = Math.min(MAX_ZOOM, Math.max(state.minZoom, Number(query.get("zoom"))));
     resize();
     const heading = document.querySelector("#area-title");
     heading.textContent = data.meta.name;
+    rotationInput.disabled = isCabaOverview;
+    rotationInput.title = isCabaOverview ? "Elegí un barrio para usar la rotación 3D" : "Rotación 3D de 360 grados";
     document.title = `${data.meta.name} — Atlas CABA 3D`;
     document.querySelector("#status").textContent = `${data.meta.counts.buildings.toLocaleString("es-AR")} volúmenes reales`;
     document.querySelector("#detail").textContent = `${data.meta.counts.roads.toLocaleString("es-AR")} tramos · ${data.meta.counts.parks} espacios verdes`;
@@ -1003,7 +1042,11 @@ function loadMap(data) {
         groundMap = { ...renderedMap, image: groundImage, ready: false };
         groundImage.onload = () => {
           groundMap.ready = true;
-          if (vectorMode) { tileCache.clear(); draw(); }
+          if (vectorMode) {
+            tileCache.clear();
+            fallbackView = overviewFallback();
+            draw();
+          }
         };
       }
     }

@@ -72,6 +72,8 @@ footer, button, small { letter-spacing: .14em; text-transform: uppercase; }
 }
 .rotation-control span { white-space: nowrap; }
 .rotation-control input { width: 100%; accent-color: #e7c687; cursor: ew-resize; }
+.rotation-control:has(input:disabled) { opacity: .42; }
+.rotation-control input:disabled { cursor: not-allowed; }
 
 .nav-status { display: grid; min-width: 165px; }
 .nav-status strong { font: 700 10px/1.2 inherit; }
